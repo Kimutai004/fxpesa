@@ -81,9 +81,6 @@ def execute_trade(symbol, lot, deviation):
     point = mt5.symbol_info(symbol).point
     price = mt5.symbol_info_tick(symbol).ask
 
-
-    # Calculate stop-loss and take-profit levels
-    risk_percentage = 0.02  # 2% risk of total margin
     stop_loss_pips = 50  # 50 pips take profit
 # Calculate stop-loss and take-profit levels
     stop_loss = price - (stop_loss_pips * point)
