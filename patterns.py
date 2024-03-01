@@ -251,6 +251,20 @@ def identify_engulfing_candles(data):
     return engulfing_candles
 
 
+
+
+def generate_signals(patterns):
+    signals = {}
+    for pattern, direction in patterns.items():
+        if direction == 'Sell':
+            signals[pattern] = 'Sell Signal'
+        elif direction == 'Buy':
+            signals[pattern] = 'Buy Signal'
+        else:
+            signals[pattern] = 'No Signal'
+    return signals
+
+
 if __name__ == "__main__":
     # Load the CSV file
     data = pd.read_csv('C:/Users/User/Downloads/EURUSD_15.csv', sep='\t', header=None, skiprows=1)
@@ -258,31 +272,32 @@ if __name__ == "__main__":
     # Set column names
     data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
 
-    # Call functions with the data DataFrame
+    # Call functions to identify patterns
     head_shoulders_pattern = head_and_shoulders(data)
-    print("Head and Shoulders Pattern:", head_shoulders_pattern)
-
     double_bottoms, double_tops = identify_patterns(data)
-    print("Double Bottoms:", double_bottoms)
-    print("Double Tops:", double_tops)
-
     wedge_patterns = identify_wedge_patterns(data)
-    print("Wedge Patterns:", wedge_patterns)
-
     wedge_continuation_patterns = identify_wedge_continuation_patterns(data)
-    print("Wedge Continuation Patterns:", wedge_continuation_patterns)
-
     flag_patterns = identify_flag_patterns(data)
-    print("Flag Patterns:", flag_patterns)
-
     triangle_patterns = identify_triangle_patterns(data)
-    print("Triangle Patterns:", triangle_patterns)
-
     pin_bars = identify_pin_bars(data)
-    print("Pin Bars:", pin_bars)
-
     engulfing_candles = identify_engulfing_candles(data)
-    print("Engulfing Candles:", engulfing_candles)
 
+    # Generate signals for identified patterns
+    patterns = {
+        'Head and Shoulders': head_shoulders_pattern,
+        'Double Bottoms': 'Sell' if double_bottoms else 'No Signal',
+        'Double Tops': 'Buy' if double_tops else 'No Signal',
+        'Wedge Patterns': 'Sell' if wedge_patterns else 'No Signal',
+        'Wedge Continuation Patterns': 'Buy' if wedge_continuation_patterns else 'No Signal',
+        'Flag Patterns': 'Sell' if flag_patterns else 'No Signal',
+        'Triangle Patterns': 'Sell' if triangle_patterns else 'No Signal',
+        'Pin Bars': 'Buy' if pin_bars else 'No Signal',
+        'Engulfing Candles': 'Buy' if engulfing_candles else 'No Signal'
+    }
 
+    # Generate signals based on the patterns and market position
+    signals = generate_signals(patterns)
 
+    # Print the signals
+    for pattern, signal in signals.items():
+        print(f"{pattern}: {signal}")
