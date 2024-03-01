@@ -58,13 +58,11 @@ def trading_strategy(symbol, timeframe, ma_period, rsi_period, macd_fast_period,
     if tick is not None:
         price = tick.bid
 
-        # Example logic: Buy when the price is above MA, RSI is oversold, and MACD crosses above signal line
         if ma is not None and rsi is not None :
             if price > ma and rsi < 30:
                 # Execute Buy trade
-                execute_trade(symbol, lot, deviation)
+                execute_trade(symbol, lot, deviation, price)
                 pass
-            # Example logic: Sell when the price is below MA, RSI is overbought, and MACD crosses below signal line
             elif price < ma and rsi > 70:
                 execute_trade(symbol, lot, deviation)
                 pass
@@ -85,8 +83,6 @@ def execute_trade(symbol, lot, deviation):
 
 
     # Calculate stop-loss and take-profit levels
-    account_info = mt5.account_info()
-    account_balance = account_info.balance
     risk_percentage = 0.02  # 2% risk of total margin
     stop_loss_pips = 50  # 50 pips take profit
 # Calculate stop-loss and take-profit levels
@@ -128,7 +124,6 @@ connect_to_mt5(login, password, server)
 
 # Execute trading logic
 execute_trade(symbol, lot, deviation)
-
 trading_strategy(symbol, mt5.TIMEFRAME_M1, 20, 14, 12, 26, 9)
 
 # Shutdown MetaTrader 5 connection
