@@ -1,4 +1,6 @@
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+
 
 def head_and_shoulders(data, lookback=20):
     if data.empty:
@@ -250,19 +252,41 @@ def identify_engulfing_candles(data):
             engulfing_candles.append((i - 1, i, 'Bearish Engulfing'))
     return engulfing_candles
 
+def predict_price_with_ml(data, patterns):
+    # Extract relevant features
+    features = data[['HIGH', 'LOW', 'CLOSE']][:-1]  # Exclude the last row
+
+    # Create a prediction target
+    target = data['CLOSE'].shift(-1)[:-1]  # Exclude the last row
+
+    # Train the model (optionally incorporating pattern information)
+    model = LinearRegression()
+    model.fit(features, target)
+
+    # Generate predictions
+    predictions = model.predict(features)
 
 
+    # Combine pattern signals and model-based predictions
+    # Example: Strengthen buy/sell signals if model prediction aligns with pattern direction
 
-def generate_signals(patterns):
-    signals = {}
+    return predictions
+
+def combine_predictions(patterns, ml_predictions):
+    final_signals = {}
     for pattern, direction in patterns.items():
-        if direction == 'Sell':
-            signals[pattern] = 'Sell Signal'
-        elif direction == 'Buy':
-            signals[pattern] = 'Buy Signal'
+        if direction == 'Buy' and ml_predictions[pattern] > 0:
+            final_signals[pattern] = 'Strong Buy'
+            # ... (logic to convert pattern to an integer index) ...
+        elif direction == 'Sell' and ml_predictions[pattern] < 0:
+            # Access prediction using integer index
+
+            final_signals[pattern] = 'Strong Sell'
+        elif direction != 'No Signal':
+            final_signals[pattern] = 'Weak ' + direction
         else:
-            signals[pattern] = 'No Signal'
-    return signals
+            final_signals[pattern] = 'No Signal'
+    return final_signals
 
 
 if __name__ == "__main__":
@@ -295,9 +319,14 @@ if __name__ == "__main__":
         'Engulfing Candles': 'Buy' if engulfing_candles else 'No Signal'
     }
 
-    # Generate signals based on the patterns and market position
-    signals = generate_signals(patterns)
 
-    # Print the signals
-    for pattern, signal in signals.items():
+    # Use machine learning to predict prices
+    ml_predictions = predict_price_with_ml(data, patterns)
+
+    # Combine pattern signals and machine learning predictions
+    final_signals = combine_predictions(patterns, ml_predictions)
+
+    # Print the final signals
+    for pattern, signal in final_signals.items():
         print(f"{pattern}: {signal}")
+
