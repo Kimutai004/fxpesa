@@ -1,7 +1,7 @@
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-
-
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 def head_and_shoulders(data, lookback=20):
     if data.empty:
         return 'DataFrame is empty'
@@ -252,41 +252,59 @@ def identify_engulfing_candles(data):
             engulfing_candles.append((i - 1, i, 'Bearish Engulfing'))
     return engulfing_candles
 
-def predict_price_with_ml(data, patterns):
+
+def preprocess_data(file_path):
+    data = pd.read_csv('C:/Users/User/Downloads/EURUSD_15.csv', sep='\t', header=None, skiprows=1)
+    data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
+    return data
+
+
+def predict_buy_sell(data):
     # Extract relevant features
     features = data[['HIGH', 'LOW', 'CLOSE']][:-1]  # Exclude the last row
 
-    # Create a prediction target
-    target = data['CLOSE'].shift(-1)[:-1]  # Exclude the last row
+    # Create a binary target variable indicating whether the price will go up or down
+    data['Price_Up'] = data['CLOSE'].shift(-1) > data['CLOSE']
+    target = data['Price_Up'][:-1]
 
-    # Train the model (optionally incorporating pattern information)
-    model = LinearRegression()
-    model.fit(features, target)
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.1, random_state=42)
 
-    # Generate predictions
-    predictions = model.predict(features)
+    # Train a logistic regression model
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+
+    # Make predictions on the test set
+    predictions = model.predict(X_test)
+
+    # Evaluate the accuracy of the model
+    accuracy = accuracy_score(y_test, predictions)
+    print(f'Model Accuracy: {accuracy}')
+
+    # Make predictions for the entire dataset
+    all_predictions = model.predict(features)
+
+    # Convert binary predictions to "Buy" or "Sell"
+    buy_sell_predictions = ['Buy' if prediction else 'Sell' for prediction in all_predictions]
+
+    # Print the predictions
+    for prediction in buy_sell_predictions:
+        print(prediction)
+
+    return buy_sell_predictions
 
 
-    # Combine pattern signals and model-based predictions
-    # Example: Strengthen buy/sell signals if model prediction aligns with pattern direction
-
-    return predictions
-
-def combine_predictions(patterns, ml_predictions):
-    final_signals = {}
+def generate_signals(patterns):
+    signals = {}
     for pattern, direction in patterns.items():
-        if direction == 'Buy' and ml_predictions[pattern] > 0:
-            final_signals[pattern] = 'Strong Buy'
-            # ... (logic to convert pattern to an integer index) ...
-        elif direction == 'Sell' and ml_predictions[pattern] < 0:
-            # Access prediction using integer index
-
-            final_signals[pattern] = 'Strong Sell'
-        elif direction != 'No Signal':
-            final_signals[pattern] = 'Weak ' + direction
+        if direction == 'Sell':
+            signals[pattern] = 'Sell Signal'
+        elif direction == 'Buy':
+            signals[pattern] = 'Buy Signal'
         else:
-            final_signals[pattern] = 'No Signal'
-    return final_signals
+            signals[pattern] = 'No Signal'
+    return signals
+
 
 
 if __name__ == "__main__":
@@ -319,14 +337,14 @@ if __name__ == "__main__":
         'Engulfing Candles': 'Buy' if engulfing_candles else 'No Signal'
     }
 
+    # Call the function to predict buy/sell using machine learning
+    ml_predictions = predict_buy_sell(data)
 
-    # Use machine learning to predict prices
-    ml_predictions = predict_price_with_ml(data, patterns)
-
-    # Combine pattern signals and machine learning predictions
-    final_signals = combine_predictions(patterns, ml_predictions)
+    # Generate final signals by combining pattern signals and machine learning predictions
+    final_signals = generate_signals(patterns)
 
     # Print the final signals
     for pattern, signal in final_signals.items():
-        print(f"{pattern}: {signal}")
+        print(f'{pattern}: {signal}')
+
 
