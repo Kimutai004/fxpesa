@@ -2,6 +2,51 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+import requests
+
+def fetch_data_from_api():
+    # Replace 'YOUR_API_KEY' with your actual Alpha Vantage API key
+    API_KEY = 'LOE8UO0DV2CKIMR7'
+
+    # Define the base URL for the Alpha Vantage API
+    base_url = 'https://www.alphavantage.co/query'
+
+    # Define the parameters for the API request
+    params = {
+        'function': 'FX_DAILY',
+        'from_symbol': 'EUR',
+        'to_symbol': 'USD',
+        'apikey': API_KEY
+    }
+
+    # Make the HTTP GET request to the Alpha Vantage API
+    response = requests.get(base_url, params=params)
+
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
+        # Parse the JSON response
+        data = response.json()
+        # Check if 'Time Series FX (Daily)' key exists in the response
+        if 'Time Series FX (Daily)' in data:
+            # Extract the time series data
+            time_series = data['Time Series FX (Daily)']
+            # Convert the time series data to a DataFrame
+            df = pd.DataFrame(time_series).T
+            # Reset index and rename columns
+            df.reset_index(inplace=True)
+            df.columns = ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']
+            # Convert date column to datetime format
+            df['DATE'] = pd.to_datetime(df['DATE'])
+            # Sort DataFrame by date
+            df.sort_values(by='DATE', inplace=True)
+            # Reset index
+            df.reset_index(drop=True, inplace=True)
+            # Print the DataFrame
+            print(df)
+        else:
+            print('Error: Time Series FX (Daily) data not found in API response')
+    else:
+        print('Failed to fetch data from Alpha Vantage API')
 
 
 def head_and_shoulders(data, lookback=20):
@@ -324,9 +369,6 @@ def predict_buy_sell(data):
 
     buy_sell_predictions = ['Buy' if prediction else 'Sell' for prediction in all_predictions]
 
-    for prediction in buy_sell_predictions:
-        print(prediction)
-
     return buy_sell_predictions
 
 
@@ -340,6 +382,54 @@ def generate_signals(patterns):
         else:
             signals[pattern] = 'No Signal'
     return signals
+
+def combine_signals(patterns, ml_predictions):
+    combined_signals = {}
+
+    # Define priority order for signals
+    signal_priority = [
+        'Engulfing Candles',
+        'Machine Learning',
+        'Head and Shoulders',
+        'Double Bottoms',
+        'Double Tops',
+        'Wedge Patterns',
+        'Wedge Continuation Patterns',
+        'Bull Flags',
+        'Bear Flags',
+        'Ascending Triangles',
+        'Descending Triangles',
+        'Pin Bars'
+    ]
+
+    # Initialize counters
+    buy_count = 0
+    sell_count = 0
+
+    # Iterate through the priority order
+    for signal_type in signal_priority:
+        if signal_type == 'Machine Learning':
+            # Add machine learning predictions
+            for prediction in ml_predictions:
+                if prediction == 'Buy':
+                    buy_count += 1
+                elif prediction == 'Sell':
+                    sell_count += 1
+        elif patterns[signal_type] in ['Buy', 'Sell']:
+            # Add pattern-based signals
+            if patterns[signal_type] == 'Buy':
+                buy_count += 1
+            elif patterns[signal_type] == 'Sell':
+                sell_count += 1
+
+    # Determine the final signal based on majority count
+    final_signal = 'No Signal'
+    if buy_count > sell_count:
+        final_signal = 'Buy'
+    elif sell_count > buy_count:
+        final_signal = 'Sell'
+
+    return final_signal
 
 
 if __name__ == "__main__":
@@ -371,7 +461,8 @@ if __name__ == "__main__":
 
     ml_predictions = predict_buy_sell(data)
 
-    final_signals = generate_signals(patterns)
+    # Combine signals
+    final_signal = combine_signals(patterns, ml_predictions)
 
-    for pattern, signal in final_signals.items():
-        print(f'{pattern}: {signal}')
+    # Print the final signal
+    print(f'Final Signal: {final_signal}')
