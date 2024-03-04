@@ -1,5 +1,6 @@
-# Import necessary libraries
 import MetaTrader5 as mt5
+from patterns import *
+import pandas as pd
 
 # mt5 credentials
 login = 130798
@@ -18,90 +19,63 @@ def connect_to_mt5(login, password, server):
 symbol = "EURUSD"
 lot = 0.01
 deviation = 20
-# Function to calculate moving averages
-def calculate_moving_average(symbol, timeframe, ma_period):
-    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, ma_period)
-    if rates is not None and len(rates) > 0:
-        sum_close = sum(rate['close'] for rate in rates)
-        return sum_close / len(rates)
-    else:
-        return None
 
-# Function to calculate RSI (Relative Strength Index)
-def calculate_rsi(symbol, timeframe, rsi_period):
-    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, rsi_period)
-    if rates is not None and len(rates) > 0:
-        price_changes = [rates[i + 1]['close'] - rates[i]['close'] for i in range(len(rates) - 1)]
-        positive_changes = [change for change in price_changes if change > 0]
-        negative_changes = [-change for change in price_changes if change < 0]
-
-        avg_gain = sum(positive_changes) / rsi_period
-        avg_loss = sum(negative_changes) / rsi_period
-
-        if avg_loss == 0:
-            return 100
-        else:
-            rs = avg_gain / avg_loss
-            return 100 - (100 / (1 + rs))
-    else:
-        return None
+# Load historical data
+data = pd.read_csv('C:/Users/User/Downloads/EURUSD_15.csv', sep='\t', header=None, skiprows=1)
+data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
 
 
-# Implement your trading strategy here
-def trading_strategy(symbol, timeframe, ma_period, rsi_period, macd_fast_period, macd_slow_period, macd_signal_period):
-    # Calculate indicators
-    ma = calculate_moving_average(symbol, timeframe, ma_period)
-    rsi = calculate_rsi(symbol, timeframe, rsi_period)
+# Generate trading signals from patterns
+head_shoulders_pattern = head_and_shoulders(data)
+double_bottoms, double_tops = identify_patterns(data)
+wedge_patterns = identify_wedge_patterns(data)
+wedge_continuation_patterns = identify_wedge_continuation_patterns(data)
+bull_flags, bear_flags = identify_flag_patterns(data)
+asc_triangles, desc_triangles = identify_triangle_patterns(data)
+pin_bars = identify_pin_bars(data)
+engulfing_candles = identify_engulfing_candles(data)
+patterns = {
+        'Head and Shoulders': head_shoulders_pattern,
+        'Double Bottoms': double_bottoms,
+        'Double Tops': double_tops,
+        'Wedge Patterns': wedge_patterns,
+        'Wedge Continuation Patterns': wedge_continuation_patterns,
+        'Bull Flags': bull_flags,
+        'Bear Flags': bear_flags,
+        'Ascending Triangles': asc_triangles,
+        'Descending Triangles': desc_triangles,
+        'Pin Bars': pin_bars,
+        'Engulfing Candles': engulfing_candles
+    }
+# Predict buy/sell signals using machine learning
+ml_predictions = predict_buy_sell(data)
 
-    # Get the current price of the symbol
-    tick = mt5.symbol_info_tick(symbol)
-    if tick is not None:
-        price = tick.bid
-
-        if ma is not None and rsi is not None :
-            if price > ma and rsi < 30:
-                # Execute Buy trade
-                execute_trade(symbol, lot, deviation, price)
-                pass
-            elif price < ma and rsi > 70:
-                execute_trade(symbol, lot, deviation)
-                pass
-            else:
-                # Hold position or do nothing
-                pass
-    else:
-        print("Failed to get the current price of the symbol.")
+# Generate signals based on patterns and ML predictions
+final_signals = generate_signals(patterns)
 
 
-def execute_trade(symbol, lot, deviation):
+def execute_trade(symbol, lot, deviation, final_signals):
 
     price = mt5.symbol_info_tick(symbol).ask
 
     # Get the current tick information
     point = mt5.symbol_info(symbol).point
-    price = mt5.symbol_info_tick(symbol).ask
 
-    stop_loss_pips = 50  # 50 pips take profit
-# Calculate stop-loss and take-profit levels
-    stop_loss = price - (stop_loss_pips * point)
-    take_profit = price + (stop_loss_pips * point)
 
+    order_type = mt5.ORDER_TYPE_BUY if final_signals == 'buy' else mt5.ORDER_TYPE_SELL
 
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
         "volume": lot,
-        "type": mt5.ORDER_TYPE_BUY,
+        "type": order_type,
         "price": price,
         "deviation": deviation,
         "magic": 234000,
-        "comment": "Python script open buy",
+        "comment": "Python script open order",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-        "sl": stop_loss,
-        "tp": take_profit
-
+        "type_filling": mt5.ORDER_FILLING_IOC
     }
 
     result = mt5.order_send(request)
@@ -112,6 +86,7 @@ def execute_trade(symbol, lot, deviation):
         print("Order placed successfully")
         print(f"Order: ticket={result.order}")
 
+
 # Shutdown connection to the MetaTrader 5 terminal
 def shutdown_mt5():
     mt5.shutdown()
@@ -120,8 +95,7 @@ def shutdown_mt5():
 connect_to_mt5(login, password, server)
 
 # Execute trading logic
-execute_trade(symbol, lot, deviation)
-trading_strategy(symbol, mt5.TIMEFRAME_M1, 20, 14, 12, 26, 9)
+execute_trade(symbol, lot, deviation, final_signals)
 
 # Shutdown MetaTrader 5 connection
 shutdown_mt5()
