@@ -1,76 +1,56 @@
 import MetaTrader5 as mt5
 from patterns import *
-import pandas as pd
 
-# mt5 credentials
+# MetaTrader 5 credentials
 login = 130798
 password = 'Mare-Dewy-09'
 server = 'EGMSecurities-Demo'
 
-
 # Connect to the MetaTrader 5 terminal
 def connect_to_mt5(login, password, server):
-    # Connect to the MetaTrader 5 terminal
     if not mt5.initialize(login=login, password=password, server=server):
         print("initialize() failed, error code =", mt5.last_error())
         quit()
 
-# Your trading bot logic goes here
+# Define trading parameters
 symbol = "EURUSD"
-lot = 0.01
+lot = 0.1
 deviation = 20
 
-# Load historical data
-data = pd.read_csv('C:/Users/User/Downloads/EURUSD_15.csv', sep='\t', header=None, skiprows=1)
-data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
-
-
-# Generate trading signals from patterns
-head_shoulders_pattern = head_and_shoulders(data)
-double_bottoms, double_tops = identify_patterns(data)
-wedge_patterns = identify_wedge_patterns(data)
-wedge_continuation_patterns = identify_wedge_continuation_patterns(data)
-bull_flags, bear_flags = identify_flag_patterns(data)
-asc_triangles, desc_triangles = identify_triangle_patterns(data)
-pin_bars = identify_pin_bars(data)
-engulfing_candles = identify_engulfing_candles(data)
-patterns = {
-        'Head and Shoulders': head_shoulders_pattern,
-        'Double Bottoms': double_bottoms,
-        'Double Tops': double_tops,
-        'Wedge Patterns': wedge_patterns,
-        'Wedge Continuation Patterns': wedge_continuation_patterns,
-        'Bull Flags': bull_flags,
-        'Bear Flags': bear_flags,
-        'Ascending Triangles': asc_triangles,
-        'Descending Triangles': desc_triangles,
-        'Pin Bars': pin_bars,
-        'Engulfing Candles': engulfing_candles
-    }
-# Predict buy/sell signals using machine learning
-ml_predictions = predict_buy_sell(data)
-
-# Generate signals based on patterns and ML predictions
-final_signals = generate_signals(patterns)
-
-
-def execute_trade(symbol, lot, deviation, final_signals):
-
-    price = mt5.symbol_info_tick(symbol).ask
-
+def execute_trade(symbol, lot, deviation, final_signal):
     # Get the current tick information
+    price = mt5.symbol_info_tick(symbol).ask
     point = mt5.symbol_info(symbol).point
 
+    # Determine the order type and set the order price
+    if 'Buy' in final_signal:
+        if 'Limit' in final_signal:
+            order_type = mt5.ORDER_TYPE_BUY_LIMIT
+            order_price = price  # Adjust this as per your strategy for buy limit price
+        else:
+            order_type = mt5.ORDER_TYPE_BUY
+            order_price = price
+    elif 'Sell' in final_signal:
+        if 'Limit' in final_signal:
+            order_type = mt5.ORDER_TYPE_SELL_LIMIT
+            order_price = price  # Adjust this as per your strategy for sell limit price
+        else:
+            order_type = mt5.ORDER_TYPE_SELL
+            order_price = price
 
-    order_type = mt5.ORDER_TYPE_BUY if final_signals == 'buy' else mt5.ORDER_TYPE_SELL
+    # Set take profit and stop loss
+    take_profit = order_price + 500 * point if 'Buy' in final_signal else order_price - 50 * point
+    stop_loss = order_price - 500 * point if 'Buy' in final_signal else order_price + 50 * point
 
-
+    # Create order request
     request = {
-        "action": mt5.TRADE_ACTION_DEAL,
+        "action": mt5.TRADE_ACTION_PENDING,
         "symbol": symbol,
         "volume": lot,
         "type": order_type,
-        "price": price,
+        "price": order_price,
+        "sl": stop_loss,
+        "tp": take_profit,
         "deviation": deviation,
         "magic": 234000,
         "comment": "Python script open order",
@@ -78,6 +58,7 @@ def execute_trade(symbol, lot, deviation, final_signals):
         "type_filling": mt5.ORDER_FILLING_IOC
     }
 
+    # Send the order
     result = mt5.order_send(request)
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"Order failed, retcode={result.retcode}")
@@ -86,16 +67,49 @@ def execute_trade(symbol, lot, deviation, final_signals):
         print("Order placed successfully")
         print(f"Order: ticket={result.order}")
 
-
 # Shutdown connection to the MetaTrader 5 terminal
 def shutdown_mt5():
     mt5.shutdown()
 
-# Connect to MetaTrader 5
-connect_to_mt5(login, password, server)
+def main():
+    # Connect to MetaTrader 5
+    connect_to_mt5(login, password, server)
 
-# Execute trading logic
-execute_trade(symbol, lot, deviation, final_signals)
+    # Fetch data and generate signals
+    data = fetch_data()
+    ml_predictions = predict_buy_sell(data)
 
-# Shutdown MetaTrader 5 connection
-shutdown_mt5()
+    # Identify patterns
+    double_bottoms, double_tops = identify_patterns(data)
+    wedge_patterns = identify_wedge_patterns(data)
+    wedge_continuation_patterns = identify_wedge_continuation_patterns(data)
+    bull_flags, bear_flags = identify_flag_patterns(data)
+    ascending_triangles, descending_triangles = identify_triangle_patterns(data)
+    pin_bars = identify_pin_bars(data)
+    bullish_engulfing, bearish_engulfing = identify_engulfing_candles(data)
+
+    patterns = {
+        'Double Bottoms': double_bottoms,
+        'Double Tops': double_tops,
+        'Wedge Patterns': wedge_patterns,
+        'Wedge Continuation Patterns': wedge_continuation_patterns,
+        'Bull Flags': bull_flags,
+        'Bear Flags': bear_flags,
+        'Ascending Triangles': ascending_triangles,
+        'Descending Triangles': descending_triangles,
+        'Pin Bars': pin_bars,
+        'Bullish Engulfing': bullish_engulfing,
+        'Bearish Engulfing': bearish_engulfing
+    }
+
+    # Combine signals
+    final_signal = combine_signals(patterns, ml_predictions, data)  # Pass 'data' as the third argument
+    
+    # Execute trade based on final signal
+    execute_trade(symbol, lot, deviation, final_signal)
+
+    # Shutdown MetaTrader 5 connection
+    shutdown_mt5()
+
+if __name__ == "__main__":
+    main()

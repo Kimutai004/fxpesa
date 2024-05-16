@@ -4,55 +4,44 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import requests
 
-def fetch_data_from_api():
-    # Replace 'YOUR_API_KEY' with your actual Alpha Vantage API key
-    API_KEY = 'LOE8UO0DV2CKIMR7'
+# Replace 'YOUR_API_KEY' with your actual Alpha Vantage API key
+API_KEY = 'LOE8UO0DV2CKIMR'
 
-    # Define the base URL for the Alpha Vantage API
-    base_url = 'https://www.alphavantage.co/query'
+base_url = 'https://www.alphavantage.co/query'
 
-    # Define the parameters for the API request
-    params = {
-        'function': 'FX_DAILY',
-        'from_symbol': 'EUR',
-        'to_symbol': 'USD',
-        'apikey': API_KEY
-    }
+params = {
+    'function': 'FX_DAILY',
+    'from_symbol': 'EUR',
+    'to_symbol': 'USD',
+    'apikey': API_KEY
+}
 
-    # Make the HTTP GET request to the Alpha Vantage API
+def fetch_data():
     response = requests.get(base_url, params=params)
-
-    # Check if the request was successful (status code 200)
     if response.status_code == 200:
-        # Parse the JSON response
         data = response.json()
-        # Check if 'Time Series FX (Daily)' key exists in the response
         if 'Time Series FX (Daily)' in data:
-            # Extract the time series data
             time_series = data['Time Series FX (Daily)']
-            # Convert the time series data to a DataFrame
             df = pd.DataFrame(time_series).T
-            # Reset index and rename columns
             df.reset_index(inplace=True)
             df.columns = ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']
-            # Convert date column to datetime format
             df['DATE'] = pd.to_datetime(df['DATE'])
-            # Sort DataFrame by date
             df.sort_values(by='DATE', inplace=True)
-            # Reset index
             df.reset_index(drop=True, inplace=True)
-            # Print the DataFrame
-            print(df)
+
+            # Convert columns to numeric
+            df['OPEN'] = pd.to_numeric(df['OPEN'], errors='coerce')
+            df['HIGH'] = pd.to_numeric(df['HIGH'], errors='coerce')
+            df['LOW'] = pd.to_numeric(df['LOW'], errors='coerce')
+            df['CLOSE'] = pd.to_numeric(df['CLOSE'], errors='coerce')
+
+            return df
         else:
-            print('Error: Time Series FX (Daily) data not found in API response')
+            raise ValueError('Error: Time Series FX (Daily) data not found in API response')
     else:
-        print('Failed to fetch data from Alpha Vantage API')
+        raise ValueError('Failed to fetch data from Alpha Vantage API')
 
-
-def head_and_shoulders(data, lookback=20):
-    if data.empty:
-        return 'DataFrame is empty'
-
+def head_and_shoulders(data, lookback=10):
     highest_high = data['HIGH'].rolling(window=lookback).max()
     lowest_low = data['LOW'].rolling(window=lookback).min()
 
@@ -83,11 +72,7 @@ def head_and_shoulders(data, lookback=20):
         'Bullish head and shoulders pattern detected' if conditions_buy else 'No head and shoulders pattern detected'
     )
 
-
 def identify_patterns(data):
-    if 'LOW' not in data.columns or 'CLOSE' not in data.columns:
-        return [], []
-
     double_bottoms = []
     double_tops = []
 
@@ -110,16 +95,12 @@ def identify_patterns(data):
 
     return double_bottoms, double_tops
 
-
-def identify_wedge_patterns(data, window=20):
+def identify_wedge_patterns(data, window=10):
     rising_wedges = []
     falling_wedges = []
 
     highest_high = data['HIGH'].rolling(window=window).max()
     lowest_low = data['LOW'].rolling(window=window).min()
-
-    rising_wedges.append(0)
-    falling_wedges.append(0)
 
     for i in range(1, len(data)):
         conditions_rising = (
@@ -154,16 +135,12 @@ def identify_wedge_patterns(data, window=20):
 
     return valid_patterns
 
-
-def identify_wedge_continuation_patterns(data, window=20):
+def identify_wedge_continuation_patterns(data, window=10):
     rising_wedges = []
     falling_wedges = []
 
     highest_high = data['HIGH'].rolling(window=window).max()
     lowest_low = data['LOW'].rolling(window=window).min()
-
-    rising_wedges.append(0)
-    falling_wedges.append(0)
 
     for i in range(1, len(data)):
         conditions_rising = (
@@ -202,16 +179,12 @@ def identify_wedge_continuation_patterns(data, window=20):
 
     return valid_patterns
 
-
-def identify_flag_patterns(data, window=20):
+def identify_flag_patterns(data, window=10):
     bull_flags = []
     bear_flags = []
 
     highest_high = data['HIGH'].rolling(window=window).max()
     lowest_low = data['LOW'].rolling(window=window).min()
-
-    bull_flags.append(0)
-    bear_flags.append(0)
 
     for i in range(1, len(data)):
         conditions_bull = (
@@ -252,29 +225,25 @@ def identify_flag_patterns(data, window=20):
 
     return valid_bull_flags, valid_bear_flags
 
-
-def identify_triangle_patterns(data, window=20):
+def identify_triangle_patterns(data, window=10):
     ascending_triangles = []
     descending_triangles = []
 
     highest_high = data['HIGH'].rolling(window=window).max()
     lowest_low = data['LOW'].rolling(window=window).min()
 
-    ascending_triangles.append(0)
-    descending_triangles.append(0)
-
     for i in range(1, len(data)):
         conditions_asc = (
             data['HIGH'].iloc[i] < highest_high.iloc[i]
             and data['LOW'].iloc[i] > lowest_low.iloc[i]
-            and data['HIGH'].iloc[i] < data['HIGH'].iloc[i - 1]
             and data['LOW'].iloc[i] > data['LOW'].iloc[i - 1]
+            and data['HIGH'].iloc[i] > data['HIGH'].iloc[i - 1]
         )
 
         conditions_desc = (
             data['HIGH'].iloc[i] > highest_high.iloc[i]
             and data['LOW'].iloc[i] < lowest_low.iloc[i]
-            and data['HIGH'].iloc[i] > data['HIGH'].iloc[i - 1]
+            and data['HIGH'].iloc[i] < data['HIGH'].iloc[i - 1]
             and data['LOW'].iloc[i] < data['LOW'].iloc[i - 1]
         )
 
@@ -284,185 +253,160 @@ def identify_triangle_patterns(data, window=20):
         if conditions_desc:
             descending_triangles.append(i)
 
-    valid_asc_triangles = [
-        ascending_triangles[i]
-        for i in range(1, len(ascending_triangles))
-        if data['LOW'].iloc[ascending_triangles[i]] > data['LOW'].iloc[ascending_triangles[i - 1]]
-    ]
-
-    valid_desc_triangles = [
-        descending_triangles[i]
-        for i in range(1, len(descending_triangles))
-        if data['HIGH'].iloc[descending_triangles[i]] < data['HIGH'].iloc[descending_triangles[i - 1]]
-    ]
-
-    return valid_asc_triangles, valid_desc_triangles
-
+    return ascending_triangles, descending_triangles
 
 def is_pin_bar(candle):
-    body_size = abs(candle['CLOSE'] - candle['OPEN'])
-    wick_size = max(
-        candle['HIGH'] - max(candle['CLOSE'], candle['OPEN']),
-        max(candle['LOW'], min(candle['OPEN'], candle['CLOSE'])) - candle['LOW']
-    )
-    return wick_size >= 2 * body_size
+    body = abs(candle['OPEN'] - candle['CLOSE'])
+    tail = candle['LOW'] - min(candle['OPEN'], candle['CLOSE'])
+    head = max(candle['OPEN'], candle['CLOSE']) - candle['HIGH']
 
+    is_bullish_pin = tail > 2 * body and head < body
+    is_bearish_pin = head > 2 * body and tail < body
+
+    return is_bullish_pin or is_bearish_pin
 
 def identify_pin_bars(data):
     pin_bars = []
-    for i in range(1, len(data)):
+
+    for i in range(len(data)):
         if is_pin_bar(data.iloc[i]):
             pin_bars.append(i)
+
     return pin_bars
 
-
 def is_bullish_engulfing(candle1, candle2):
-    return (
-        candle2['OPEN'] < candle1['CLOSE']
-        and candle2['CLOSE'] > candle1['OPEN']
-        and candle2['HIGH'] > candle1['HIGH']
-        and candle2['LOW'] < candle1['LOW']
-    )
-
+    return candle1['OPEN'] > candle1['CLOSE'] and candle2['OPEN'] < candle2['CLOSE'] and candle2['OPEN'] < candle1['CLOSE'] and candle2['CLOSE'] > candle1['OPEN']
 
 def is_bearish_engulfing(candle1, candle2):
-    return (
-        candle2['OPEN'] > candle1['CLOSE']
-        and candle2['CLOSE'] < candle1['OPEN']
-        and candle2['HIGH'] > candle1['HIGH']
-        and candle2['LOW'] < candle1['LOW']
-    )
-
+    return candle1['OPEN'] < candle1['CLOSE'] and candle2['OPEN'] > candle2['CLOSE'] and candle2['OPEN'] > candle1['CLOSE'] and candle2['CLOSE'] < candle1['OPEN']
 
 def identify_engulfing_candles(data):
-    engulfing_candles = []
-    for i in range(2, len(data)):
+    bullish_engulfing = []
+    bearish_engulfing = []
+
+    for i in range(1, len(data)):
         if is_bullish_engulfing(data.iloc[i - 1], data.iloc[i]):
-            engulfing_candles.append((i - 1, i, 'Bullish Engulfing'))
+            bullish_engulfing.append(i)
         elif is_bearish_engulfing(data.iloc[i - 1], data.iloc[i]):
-            engulfing_candles.append((i - 1, i, 'Bearish Engulfing'))
-    return engulfing_candles
+            bearish_engulfing.append(i)
 
-
-def preprocess_data(file_path):
-    data = pd.read_csv(file_path, sep='\t', header=None, skiprows=1)
-    data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
-    return data
-
+    return bullish_engulfing, bearish_engulfing
 
 def predict_buy_sell(data):
-    features = data[['HIGH', 'LOW', 'CLOSE']][:-1]
-    data['Price_Up'] = data['CLOSE'].shift(-1) > data['CLOSE']
-    target = data['Price_Up'][:-1]
+    data['RETURN'] = data['CLOSE'].pct_change()
+    data.dropna(inplace=True)
 
-    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+    X = data[['OPEN', 'HIGH', 'LOW', 'CLOSE']]
+    y = (data['RETURN'] > 0).astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     model = LogisticRegression()
     model.fit(X_train, y_train)
 
-    predictions = model.predict(X_test)
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
 
-    accuracy = accuracy_score(y_test, predictions)
-    print(f'Model Accuracy: {accuracy}')
+    print(f'Model Accuracy: {accuracy * 100:.2f}%')
 
-    all_predictions = model.predict(features)
+    data['PREDICTION'] = model.predict(X)
 
-    buy_sell_predictions = ['Buy' if prediction else 'Sell' for prediction in all_predictions]
-
-    return buy_sell_predictions
-
+    return data
 
 def generate_signals(patterns):
-    signals = {}
-    for pattern, direction in patterns.items():
-        if direction == 'Sell':
-            signals[pattern] = 'Sell Signal'
-        elif direction == 'Buy':
-            signals[pattern] = 'Buy Signal'
+    signals = []
+
+    for pattern in patterns:
+        if pattern in ['Double Bottoms', 'Double Tops', 'Wedge Patterns', 'Wedge Continuation Patterns', 'Bull Flags', 'Bear Flags', 'Ascending Triangles', 'Descending Triangles']:
+            signals.append('Sell' if patterns[pattern] else 'No Signal')
         else:
-            signals[pattern] = 'No Signal'
+            signals.append('Buy' if patterns[pattern] else 'No Signal')
+
     return signals
 
-def combine_signals(patterns, ml_predictions):
-    combined_signals = {}
+def combine_signals(patterns, ml_predictions, data):
+    signals = generate_signals(patterns)
+    ml_signals = ml_predictions['PREDICTION'].values
 
-    # Define priority order for signals
-    signal_priority = [
-        'Engulfing Candles',
-        'Machine Learning',
-        'Head and Shoulders',
-        'Double Bottoms',
-        'Double Tops',
-        'Wedge Patterns',
-        'Wedge Continuation Patterns',
-        'Bull Flags',
-        'Bear Flags',
-        'Ascending Triangles',
-        'Descending Triangles',
-        'Pin Bars'
-    ]
+    # Calculate the current price
+    current_price = data['CLOSE'].iloc[-1]
+    print("Current Price:", current_price)
 
-    # Initialize counters
-    buy_count = 0
-    sell_count = 0
+    print("Signals:", signals)
+    print("ML Predictions:", ml_signals)
 
-    # Iterate through the priority order
-    for signal_type in signal_priority:
-        if signal_type == 'Machine Learning':
-            # Add machine learning predictions
-            for prediction in ml_predictions:
-                if prediction == 'Buy':
-                    buy_count += 1
-                elif prediction == 'Sell':
-                    sell_count += 1
-        elif patterns[signal_type] in ['Buy', 'Sell']:
-            # Add pattern-based signals
-            if patterns[signal_type] == 'Buy':
-                buy_count += 1
-            elif patterns[signal_type] == 'Sell':
-                sell_count += 1
+    combined_signal = 'Hold'
 
-    # Determine the final signal based on majority count
-    final_signal = 'No Signal'
-    if buy_count > sell_count:
-        final_signal = 'Buy'
-    elif sell_count > buy_count:
-        final_signal = 'Sell'
+    # Count the number of buy and sell signals
+    num_buy_signals = signals.count('Buy')
+    num_sell_signals = signals.count('Sell')
 
-    return final_signal
+    # Check if the number of sell signals is more than buy signals
+    if num_sell_signals > num_buy_signals:
+        combined_signal = 'Sell'
+    # Check if the number of buy signals is more than sell signals
+    elif num_buy_signals > num_sell_signals:
+        combined_signal = 'Buy'
+    # If the number of buy and sell signals are equal, or if both are zero, use ML prediction
+    elif ml_signals[-1] == 1:
+        combined_signal = 'Buy'
+    elif ml_signals[-1] == 0:
+        combined_signal = 'Sell'
 
+    # Check if a buy signal is present
+    if combined_signal == 'Buy':
+        # Check if there's a stronger buy signal than "Hold"
+        if 'Buy' in signals and 'Sell' not in signals:
+            # Check if the current price is suitable for a buy stop or buy limit
+            if current_price > data['HIGH'].max():
+                combined_signal = f'Buy Stop at {current_price:.2f}'
+            else:
+                combined_signal = f'Buy Limit at {current_price:.2f}'
 
-if __name__ == "__main__":
-    data = pd.read_csv('C:/Users/User/Downloads/EURUSD_15.csv', sep='\t', header=None, skiprows=1)
-    data.columns = ['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'TICKVOL', 'VOL', 'SPREAD']
+    # Check if a sell signal is present
+    elif combined_signal == 'Sell':
+        # Check if there's a stronger sell signal than "Hold"
+        if 'Sell' in signals and 'Buy' not in signals:
+            # Check if the current price is suitable for a sell stop or sell limit
+            if current_price < data['LOW'].min():
+                combined_signal = f'Sell Stop at {current_price:.2f}'
+            else:
+                combined_signal = f'Sell Limit at {current_price:.2f}'
 
-    head_shoulders_pattern = head_and_shoulders(data)
+    return combined_signal
+
+def main():
+    data = fetch_data()
+
+    # Identify patterns
     double_bottoms, double_tops = identify_patterns(data)
     wedge_patterns = identify_wedge_patterns(data)
     wedge_continuation_patterns = identify_wedge_continuation_patterns(data)
     bull_flags, bear_flags = identify_flag_patterns(data)
-    asc_triangles, desc_triangles = identify_triangle_patterns(data)
+    ascending_triangles, descending_triangles = identify_triangle_patterns(data)
     pin_bars = identify_pin_bars(data)
-    engulfing_candles = identify_engulfing_candles(data)
+    bullish_engulfing, bearish_engulfing = identify_engulfing_candles(data)
 
     patterns = {
-        'Head and Shoulders': head_shoulders_pattern,
-        'Double Bottoms': 'Sell' if double_bottoms else 'No Signal',
-        'Double Tops': 'Buy' if double_tops else 'No Signal',
-        'Wedge Patterns': 'Sell' if wedge_patterns else 'No Signal',
-        'Wedge Continuation Patterns': 'Buy' if wedge_continuation_patterns else 'No Signal',
-        'Bull Flags': 'Sell' if bull_flags else 'No Signal',
-        'Bear Flags': 'Sell' if bear_flags else 'No Signal',
-        'Ascending Triangles': 'Sell' if asc_triangles else 'No Signal',
-        'Descending Triangles': 'Sell' if desc_triangles else 'No Signal',
-        'Pin Bars': 'Buy' if pin_bars else 'No Signal',
-        'Engulfing Candles': 'Buy' if engulfing_candles else 'No Signal'
+        'Double Bottoms': double_bottoms,
+        'Double Tops': double_tops,
+        'Wedge Patterns': wedge_patterns,
+        'Wedge Continuation Patterns': wedge_continuation_patterns,
+        'Bull Flags': bull_flags,
+        'Bear Flags': bear_flags,
+        'Ascending Triangles': ascending_triangles,
+        'Descending Triangles': descending_triangles,
+        'Pin Bars': pin_bars,
+        'Bullish Engulfing': bullish_engulfing,
+        'Bearish Engulfing': bearish_engulfing
     }
 
+    # Predict buy/sell using machine learning
     ml_predictions = predict_buy_sell(data)
 
     # Combine signals
-    final_signal = combine_signals(patterns, ml_predictions)
+    final_signal = combine_signals(patterns, ml_predictions, data)
+    print(f'Final Trading Signal: {final_signal}')
 
-    # Print the final signal
-    print(f'Final Signal: {final_signal}')
+if __name__ == "__main__":
+    main()
