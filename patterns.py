@@ -11,7 +11,7 @@ base_url = 'https://www.alphavantage.co/query'
 
 params = {
     'function': 'FX_DAILY',
-    'from_symbol': 'EUR',
+    'from_symbol': 'AUD',
     'to_symbol': 'USD',
     'apikey': API_KEY
 }
@@ -313,6 +313,7 @@ def predict_buy_sell(data):
 
     return data
 
+
 def generate_signals(patterns):
     signals = []
 
@@ -326,14 +327,14 @@ def generate_signals(patterns):
 
 def combine_signals(patterns, ml_predictions, data):
     signals = generate_signals(patterns)
-    ml_signals = ml_predictions['PREDICTION'].values
+    ml_signal = ml_predictions['PREDICTION'].values[-1]  # Get the latest ML prediction
 
     # Calculate the current price
     current_price = data['CLOSE'].iloc[-1]
     print("Current Price:", current_price)
 
     print("Signals:", signals)
-    print("ML Predictions:", ml_signals)
+    print("ML Prediction:", ml_signal)
 
     combined_signal = 'Hold'
 
@@ -341,39 +342,30 @@ def combine_signals(patterns, ml_predictions, data):
     num_buy_signals = signals.count('Buy')
     num_sell_signals = signals.count('Sell')
 
-    # Check if the number of sell signals is more than buy signals
+    # Determine the final signal based on pattern signals
     if num_sell_signals > num_buy_signals:
         combined_signal = 'Sell'
-    # Check if the number of buy signals is more than sell signals
     elif num_buy_signals > num_sell_signals:
         combined_signal = 'Buy'
-    # If the number of buy and sell signals are equal, or if both are zero, use ML prediction
-    elif ml_signals[-1] == 1:
-        combined_signal = 'Buy'
-    elif ml_signals[-1] == 0:
-        combined_signal = 'Sell'
+    else:  # If buy and sell signals are equal, use ML prediction
+        combined_signal = 'Buy' if ml_signal == 1 else 'Sell'
 
-    # Check if a buy signal is present
+    # Determine if a stronger buy or sell signal is present
     if combined_signal == 'Buy':
-        # Check if there's a stronger buy signal than "Hold"
         if 'Buy' in signals and 'Sell' not in signals:
-            # Check if the current price is suitable for a buy stop or buy limit
             if current_price > data['HIGH'].max():
                 combined_signal = f'Buy Stop at {current_price:.2f}'
             else:
                 combined_signal = f'Buy Limit at {current_price:.2f}'
-
-    # Check if a sell signal is present
     elif combined_signal == 'Sell':
-        # Check if there's a stronger sell signal than "Hold"
         if 'Sell' in signals and 'Buy' not in signals:
-            # Check if the current price is suitable for a sell stop or sell limit
             if current_price < data['LOW'].min():
                 combined_signal = f'Sell Stop at {current_price:.2f}'
             else:
                 combined_signal = f'Sell Limit at {current_price:.2f}'
 
     return combined_signal
+
 
 def main():
     data = fetch_data()

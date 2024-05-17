@@ -13,7 +13,7 @@ def connect_to_mt5(login, password, server):
         quit()
 
 # Define trading parameters
-symbol = "EURUSD"
+symbol = "AUDUSD"
 lot = 0.1
 deviation = 20
 
@@ -39,12 +39,12 @@ def execute_trade(symbol, lot, deviation, final_signal):
             order_price = price
 
     # Set take profit and stop loss
-    take_profit = order_price + 500 * point if 'Buy' in final_signal else order_price - 50 * point
-    stop_loss = order_price - 500 * point if 'Buy' in final_signal else order_price + 50 * point
+    take_profit = order_price + 500 * point if 'Buy' in final_signal else order_price - 500 * point
+    stop_loss = order_price - 500 * point if 'Buy' in final_signal else order_price + 500 * point
 
     # Create order request
     request = {
-        "action": mt5.TRADE_ACTION_PENDING,
+        "action": mt5.TRADE_ACTION_PENDING if 'Limit' in final_signal else mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
         "volume": lot,
         "type": order_type,
