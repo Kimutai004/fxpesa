@@ -1,47 +1,20 @@
+import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-import requests
+import yfinance as yf
 
-# Replace 'YOUR_API_KEY' with your actual Alpha Vantage API key
-API_KEY = 'LOE8UO0DV2CKIMR'
+# Fetch 15-minute interval data from Yahoo Finance
+def fetch_data(symbol='AUDUSD=X', interval='15m'):
+    data = yf.download(tickers=symbol, interval=interval, period="60d")
+    data.reset_index(inplace=True)
+    data.columns = ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'ADJ CLOSE', 'VOLUME']
+    data.drop(columns=['ADJ CLOSE', 'VOLUME'], inplace=True)
+    return data
 
-base_url = 'https://www.alphavantage.co/query'
 
-params = {
-    'function': 'FX_DAILY',
-    'from_symbol': 'AUD',
-    'to_symbol': 'USD',
-    'apikey': API_KEY
-}
-
-def fetch_data():
-    response = requests.get(base_url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        if 'Time Series FX (Daily)' in data:
-            time_series = data['Time Series FX (Daily)']
-            df = pd.DataFrame(time_series).T
-            df.reset_index(inplace=True)
-            df.columns = ['DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE']
-            df['DATE'] = pd.to_datetime(df['DATE'])
-            df.sort_values(by='DATE', inplace=True)
-            df.reset_index(drop=True, inplace=True)
-
-            # Convert columns to numeric
-            df['OPEN'] = pd.to_numeric(df['OPEN'], errors='coerce')
-            df['HIGH'] = pd.to_numeric(df['HIGH'], errors='coerce')
-            df['LOW'] = pd.to_numeric(df['LOW'], errors='coerce')
-            df['CLOSE'] = pd.to_numeric(df['CLOSE'], errors='coerce')
-
-            return df
-        else:
-            raise ValueError('Error: Time Series FX (Daily) data not found in API response')
-    else:
-        raise ValueError('Failed to fetch data from Alpha Vantage API')
-
-def head_and_shoulders(data, lookback=10):
+def head_and_shoulders(data, lookback=50):
     highest_high = data['HIGH'].rolling(window=lookback).max()
     lowest_low = data['LOW'].rolling(window=lookback).min()
 
@@ -95,7 +68,7 @@ def identify_patterns(data):
 
     return double_bottoms, double_tops
 
-def identify_wedge_patterns(data, window=10):
+def identify_wedge_patterns(data, window=50):
     rising_wedges = []
     falling_wedges = []
 
@@ -135,7 +108,7 @@ def identify_wedge_patterns(data, window=10):
 
     return valid_patterns
 
-def identify_wedge_continuation_patterns(data, window=10):
+def identify_wedge_continuation_patterns(data, window=50):
     rising_wedges = []
     falling_wedges = []
 
@@ -179,7 +152,7 @@ def identify_wedge_continuation_patterns(data, window=10):
 
     return valid_patterns
 
-def identify_flag_patterns(data, window=10):
+def identify_flag_patterns(data, window=50):
     bull_flags = []
     bear_flags = []
 
@@ -225,7 +198,7 @@ def identify_flag_patterns(data, window=10):
 
     return valid_bull_flags, valid_bear_flags
 
-def identify_triangle_patterns(data, window=10):
+def identify_triangle_patterns(data, window=50):
     ascending_triangles = []
     descending_triangles = []
 
@@ -292,6 +265,36 @@ def identify_engulfing_candles(data):
 
     return bullish_engulfing, bearish_engulfing
 
+# Moving Average function
+def moving_average(data, window):
+  return data['CLOSE'].rolling(window=window).mean()
+
+# Detect Round Bottom pattern
+def detect_round_bottom(data, window=50):
+    ma = moving_average(data, window)
+    data['RoundBottom'] = ((ma.shift(window) > ma) & (ma.shift(window // 2) < ma) & (ma > ma.shift(-window))).astype(int)
+    return data
+
+def detect_round_top(data, window=50):
+    ma = moving_average(data, window)
+    data['RoundTop'] = ((ma.shift(window) < ma) & (ma.shift(window // 2) > ma) & (ma < ma.shift(-window))).astype(int)
+    return data
+
+# Detect Cup and Handle pattern
+def detect_cup_handle(data, window=50, handle_length=10):
+    ma = moving_average(data, window)
+    data['CupHandle'] = ((ma.shift(window) > ma) & (ma.shift(window // 2) < ma) & (ma > ma.shift(-window)) &
+                         (data['CLOSE'].shift(-handle_length) > data['CLOSE'])).astype(int)
+    return data
+
+
+# Detect Inverse Cup and Handle pattern
+def detect_inverse_cup_handle(data, window=50, handle_length=10):
+    ma = moving_average(data, window)
+    data['InverseCupHandle'] = ((ma.shift(window) < ma) & (ma.shift(window // 2) > ma) & (ma < ma.shift(-window)) &
+                                (data['CLOSE'].shift(-handle_length) < data['CLOSE'])).astype(int)
+    return data
+
 def predict_buy_sell(data):
     data['RETURN'] = data['CLOSE'].pct_change()
     data.dropna(inplace=True)
@@ -301,7 +304,7 @@ def predict_buy_sell(data):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = LogisticRegression()
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
@@ -311,61 +314,27 @@ def predict_buy_sell(data):
 
     data['PREDICTION'] = model.predict(X)
 
-    return data
+    return data, accuracy
 
+def evaluate_patterns(patterns, data):
+    accuracies = {}
+    for pattern_name, indices in patterns.items():
+        if len(indices) == 0:
+            accuracies[pattern_name] = 0
+            continue
 
-def generate_signals(patterns):
-    signals = []
+        signals = np.zeros(len(data))
+        signals[indices] = 1
 
-    for pattern in patterns:
-        if pattern in ['Double Bottoms', 'Double Tops', 'Wedge Patterns', 'Wedge Continuation Patterns', 'Bull Flags', 'Bear Flags', 'Ascending Triangles', 'Descending Triangles']:
-            signals.append('Sell' if patterns[pattern] else 'No Signal')
-        else:
-            signals.append('Buy' if patterns[pattern] else 'No Signal')
+        returns = data['CLOSE'].pct_change().shift(-1)
+        signals = signals[:len(returns)]
+        returns = returns.dropna()
+        signals = signals[:len(returns)]
 
-    return signals
+        accuracy = ((signals == (returns > 0)).sum()) / len(signals)
+        accuracies[pattern_name] = accuracy
 
-def combine_signals(patterns, ml_predictions, data):
-    signals = generate_signals(patterns)
-    ml_signal = ml_predictions['PREDICTION'].values[-1]  # Get the latest ML prediction
-
-    # Calculate the current price
-    current_price = data['CLOSE'].iloc[-1]
-    print("Current Price:", current_price)
-
-    print("Signals:", signals)
-    print("ML Prediction:", ml_signal)
-
-    combined_signal = 'Hold'
-
-    # Count the number of buy and sell signals
-    num_buy_signals = signals.count('Buy')
-    num_sell_signals = signals.count('Sell')
-
-    # Determine the final signal based on pattern signals
-    if num_sell_signals > num_buy_signals:
-        combined_signal = 'Sell'
-    elif num_buy_signals > num_sell_signals:
-        combined_signal = 'Buy'
-    else:  # If buy and sell signals are equal, use ML prediction
-        combined_signal = 'Buy' if ml_signal == 1 else 'Sell'
-
-    # Determine if a stronger buy or sell signal is present
-    if combined_signal == 'Buy':
-        if 'Buy' in signals and 'Sell' not in signals:
-            if current_price > data['HIGH'].max():
-                combined_signal = f'Buy Stop at {current_price:.2f}'
-            else:
-                combined_signal = f'Buy Limit at {current_price:.2f}'
-    elif combined_signal == 'Sell':
-        if 'Sell' in signals and 'Buy' not in signals:
-            if current_price < data['LOW'].min():
-                combined_signal = f'Sell Stop at {current_price:.2f}'
-            else:
-                combined_signal = f'Sell Limit at {current_price:.2f}'
-
-    return combined_signal
-
+    return accuracies
 
 def main():
     data = fetch_data()
@@ -379,6 +348,12 @@ def main():
     pin_bars = identify_pin_bars(data)
     bullish_engulfing, bearish_engulfing = identify_engulfing_candles(data)
 
+    # Detect additional patterns
+    data = detect_round_bottom(data)
+    data = detect_round_top(data)
+    data = detect_cup_handle(data)
+    data = detect_inverse_cup_handle(data)
+
     patterns = {
         'Double Bottoms': double_bottoms,
         'Double Tops': double_tops,
@@ -390,14 +365,28 @@ def main():
         'Descending Triangles': descending_triangles,
         'Pin Bars': pin_bars,
         'Bullish Engulfing': bullish_engulfing,
-        'Bearish Engulfing': bearish_engulfing
+        'Bearish Engulfing': bearish_engulfing,
+        'Round Bottom': data[data['RoundBottom'] == 1].index.tolist(),
+        'Round Top': data[data['RoundTop'] == 1].index.tolist(),
+        'Cup and Handle': data[data['CupHandle'] == 1].index.tolist(),
+        'Inverse Cup and Handle': data[data['InverseCupHandle'] == 1].index.tolist()
     }
 
-    # Predict buy/sell using machine learning
-    ml_predictions = predict_buy_sell(data)
+    # Evaluate patterns
+    accuracies = evaluate_patterns(patterns, data)
+    print("Pattern Accuracies:", accuracies)
 
-    # Combine signals
-    final_signal = combine_signals(patterns, ml_predictions, data)
+    # Predict buy/sell using machine learning
+    ml_predictions, ml_accuracy = predict_buy_sell(data)
+
+    # Find the pattern with the highest accuracy
+    best_pattern = max(accuracies, key=accuracies.get)
+    print(f'Best Pattern: {best_pattern} with Accuracy: {accuracies[best_pattern] * 100:.2f}%')
+
+    # Generate final signal based on the best pattern
+    best_pattern_indices = patterns[best_pattern]
+    final_signal = 'Buy' if len(best_pattern_indices) > 0 and data['CLOSE'].iloc[best_pattern_indices[-1]] > data['OPEN'].iloc[best_pattern_indices[-1]] else 'Sell'
+
     print(f'Final Trading Signal: {final_signal}')
 
 if __name__ == "__main__":
